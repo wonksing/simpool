@@ -13,3 +13,15 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# mac
+.DS_Store
+._*
+
+# log files
+logs/
+*.log
+*.log.gz
+
+# debug files
+debug
