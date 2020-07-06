@@ -16,7 +16,7 @@ type MyJob struct {
 	res  chan string
 }
 
-func NewMyJob(name string) simpool.Job {
+func NewMyJob(name string) *MyJob {
 	return &MyJob{
 		name: name,
 		res:  make(chan string),
@@ -26,11 +26,10 @@ func (s *MyJob) Execute() interface{} {
 	// fmt.Println(s.name)
 	rn := rand.Intn(100)
 	time.Sleep(time.Millisecond * time.Duration(rn))
+	s.res <- s.name
 	return s.name
 }
-func (s *MyJob) SetResult(data interface{}) {
-	s.res <- data.(string)
-}
+
 func (s *MyJob) GetResult() interface{} {
 	return <-s.res
 }
@@ -54,7 +53,7 @@ func TestGoPool2(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
-	gp.TerminateAndWait()
+	gp.Close()
 }
 
 type MyJobWithResult struct {
@@ -86,7 +85,7 @@ func TestGoPool2WithResult(t *testing.T) {
 		gp.Queue(job)
 	}
 	time.Sleep(time.Second * 1)
-	gp.TerminateAndWait()
+	gp.Close()
 
 	done := make(chan bool)
 	go func() {

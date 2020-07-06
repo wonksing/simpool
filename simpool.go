@@ -4,7 +4,6 @@ import "sync"
 
 type Job interface {
 	Execute() interface{}
-	SetResult(data interface{})
 	GetResult() interface{}
 }
 type Pool struct {
@@ -29,20 +28,8 @@ func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 }
 
 func NewPoolWithResult(noOfWorkers int, maxQueueSize int) *Pool {
-	// var wg sync.WaitGroup
-	// jobChan := make(chan Job, maxQueueSize)
-	// resChan := make(chan interface{}, maxQueueSize)
-	// p := &Pool{
-	// 	noOfWorkers:  noOfWorkers,
-	// 	maxQueueSize: maxQueueSize,
-	// 	wg:           &wg,
-	// 	jobChan:      jobChan,
-	// 	ResChan:      resChan,
-	// }
 	p := NewPool(noOfWorkers, maxQueueSize)
 	p.ResChan = make(chan interface{}, maxQueueSize)
-	// var wg sync.WaitGroup
-	// p.wgResChan = &wg
 	return p
 }
 
@@ -62,7 +49,6 @@ func (p *Pool) startWorkers() {
 	for job := range p.jobChan {
 		if job != nil {
 			res := job.Execute()
-			job.SetResult(res)
 			if p.ResChan != nil {
 				// p.wgResChan.Add(1)
 				p.ResChan <- res
@@ -76,8 +62,8 @@ func (p *Pool) Queue(job Job) {
 	p.jobChan <- job
 }
 
-// TerminateAndWait for workers to return
-func (p *Pool) TerminateAndWait() {
+// Close workers
+func (p *Pool) Close() {
 	close(p.jobChan)
 	p.wg.Wait()
 
