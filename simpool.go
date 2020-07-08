@@ -2,10 +2,13 @@ package simpool
 
 import "sync"
 
+// Job interface
 type Job interface {
 	Execute() interface{}
 	GetResult() interface{}
 }
+
+// Pool struct
 type Pool struct {
 	noOfWorkers  int
 	maxQueueSize int
@@ -15,6 +18,7 @@ type Pool struct {
 	// wgResChan    *sync.WaitGroup
 }
 
+// NewPool create pool object
 func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 	var wg sync.WaitGroup
 	jobChan := make(chan Job, maxQueueSize)
@@ -27,12 +31,14 @@ func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 	return p
 }
 
+// NewPoolWithResult create a pool with result channel
 func NewPoolWithResult(noOfWorkers int, maxQueueSize int) *Pool {
 	p := NewPool(noOfWorkers, maxQueueSize)
 	p.ResChan = make(chan interface{}, maxQueueSize)
 	return p
 }
 
+// Init initializes the pool
 func (p *Pool) Init() {
 	p.wg.Add(p.noOfWorkers)
 	for i := 0; i < p.noOfWorkers; i++ {
@@ -48,10 +54,9 @@ func (p *Pool) startWorkers() {
 	// break when the channel is closed and empty.
 	for job := range p.jobChan {
 		if job != nil {
-			res := job.Execute()
+			_ = job.Execute()
 			if p.ResChan != nil {
-				// p.wgResChan.Add(1)
-				p.ResChan <- res
+				p.ResChan <- job.GetResult()
 			}
 		}
 	}
@@ -69,6 +74,5 @@ func (p *Pool) Close() {
 
 	if p.ResChan != nil {
 		close(p.ResChan)
-		// p.wgResChan.Wait()
 	}
 }
