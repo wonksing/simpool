@@ -2,25 +2,12 @@ package simpool
 
 import "sync"
 
-// JobResult struct
-type JobResult struct {
-	Res interface{}
-	Err error
-}
-
-// Job interface
-type Job interface {
-	Execute()
-	GetExecutedResult() *JobResult
-}
-
 // Pool struct
 type Pool struct {
 	noOfWorkers  int
 	maxQueueSize int
 	wg           *sync.WaitGroup
 	jobChan      chan Job
-	// ResChan      chan JobResult
 }
 
 // NewPool create pool object
@@ -36,13 +23,6 @@ func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 	p.init()
 	return p
 }
-
-// NewPoolWithResult create a pool with result channel
-// func NewPoolWithResult(noOfWorkers int, maxQueueSize int, resChan chan JobResult) *Pool {
-// 	p := NewPool(noOfWorkers, maxQueueSize)
-// 	p.ResChan = resChan
-// 	return p
-// }
 
 // Init initializes the pool
 func (p *Pool) init() {
@@ -61,15 +41,12 @@ func (p *Pool) startWorkers() {
 	for job := range p.jobChan {
 		if job != nil {
 			job.Execute()
-			// if p.ResChan != nil {
-			// 	p.ResChan <- res
-			// }
 		}
 	}
 }
 
 // QueueAndWait pushes a job into the Pool and wait for it to finish
-func (p *Pool) QueueAndWait(job Job) *JobResult {
+func (p *Pool) QueueAndWait(job JobWithResult) *JobResult {
 	p.jobChan <- job
 	return job.GetExecutedResult()
 }
@@ -83,8 +60,4 @@ func (p *Pool) Queue(job Job) {
 func (p *Pool) Close() {
 	close(p.jobChan)
 	p.wg.Wait()
-
-	// if p.ResChan != nil {
-	// 	close(p.ResChan)
-	// }
 }

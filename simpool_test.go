@@ -10,18 +10,18 @@ import (
 
 var Validate chan string
 
-type MyJob struct {
+type MyJobWithResult struct {
 	name string
 	res  chan *simpool.JobResult
 }
 
-func NewMyJob(name string) *MyJob {
-	return &MyJob{
+func NewMyJobWithResult(name string) *MyJobWithResult {
+	return &MyJobWithResult{
 		name: name,
 		res:  make(chan *simpool.JobResult),
 	}
 }
-func (s *MyJob) Execute() {
+func (s *MyJobWithResult) Execute() {
 	defer close(s.res)
 
 	// rn := rand.Intn(100)
@@ -32,7 +32,7 @@ func (s *MyJob) Execute() {
 	Validate <- s.name
 }
 
-func (s *MyJob) GetExecutedResult() *simpool.JobResult {
+func (s *MyJobWithResult) GetExecutedResult() *simpool.JobResult {
 	return <-s.res
 }
 
@@ -49,7 +49,7 @@ func TestPoolWithWait(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			job := NewMyJob(strconv.Itoa(n))
+			job := NewMyJobWithResult(strconv.Itoa(n))
 
 			r := gp.QueueAndWait(job)
 			if r.Err != nil {
@@ -74,23 +74,19 @@ func TestPoolWithWait(t *testing.T) {
 	}
 }
 
-type MySimpleJob struct {
+type MyJob struct {
 	name string
 }
 
-func NewMySimpleJob(name string) *MySimpleJob {
-	return &MySimpleJob{
+func NewMyJob(name string) *MyJob {
+	return &MyJob{
 		name: name,
 	}
 }
-func (s *MySimpleJob) Execute() {
+func (s *MyJob) Execute() {
 	// rn := rand.Intn(100)
 	// time.Sleep(time.Millisecond * time.Duration(rn))
 	Validate <- s.name
-}
-
-func (s *MySimpleJob) GetExecutedResult() *simpool.JobResult {
-	return nil
 }
 
 func TestPoolSimple(t *testing.T) {
@@ -101,7 +97,7 @@ func TestPoolSimple(t *testing.T) {
 
 	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
 	for i := 0; i < numTests; i++ {
-		job := NewMySimpleJob(strconv.Itoa(i))
+		job := NewMyJob(strconv.Itoa(i))
 		gp.Queue(job)
 	}
 	gp.Close()
