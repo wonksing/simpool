@@ -2,10 +2,16 @@ package simpool
 
 import "sync"
 
+// JobResult struct
+type JobResult struct {
+	Res interface{}
+	Err error
+}
+
 // Job interface
 type Job interface {
-	Execute() interface{}
-	GetResult() interface{}
+	Execute()
+	GetExecutedResult() *JobResult
 }
 
 // Pool struct
@@ -14,8 +20,7 @@ type Pool struct {
 	maxQueueSize int
 	wg           *sync.WaitGroup
 	jobChan      chan Job
-	ResChan      chan interface{}
-	// wgResChan    *sync.WaitGroup
+	// ResChan      chan JobResult
 }
 
 // NewPool create pool object
@@ -28,18 +33,19 @@ func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 		wg:           &wg,
 		jobChan:      jobChan,
 	}
+	p.init()
 	return p
 }
 
 // NewPoolWithResult create a pool with result channel
-func NewPoolWithResult(noOfWorkers int, maxQueueSize int) *Pool {
-	p := NewPool(noOfWorkers, maxQueueSize)
-	p.ResChan = make(chan interface{}, maxQueueSize)
-	return p
-}
+// func NewPoolWithResult(noOfWorkers int, maxQueueSize int, resChan chan JobResult) *Pool {
+// 	p := NewPool(noOfWorkers, maxQueueSize)
+// 	p.ResChan = resChan
+// 	return p
+// }
 
 // Init initializes the pool
-func (p *Pool) Init() {
+func (p *Pool) init() {
 	p.wg.Add(p.noOfWorkers)
 	for i := 0; i < p.noOfWorkers; i++ {
 		go p.startWorkers()
@@ -50,16 +56,22 @@ func (p *Pool) startWorkers() {
 	defer p.wg.Done()
 
 	// it is a blocking operation.
-	// wait until a task is received.
+	// wait until a job is received.
 	// break when the channel is closed and empty.
 	for job := range p.jobChan {
 		if job != nil {
-			_ = job.Execute()
-			if p.ResChan != nil {
-				p.ResChan <- job.GetResult()
-			}
+			job.Execute()
+			// if p.ResChan != nil {
+			// 	p.ResChan <- res
+			// }
 		}
 	}
+}
+
+// QueueAndWait pushes a job into the Pool and wait for it to finish
+func (p *Pool) QueueAndWait(job Job) *JobResult {
+	p.jobChan <- job
+	return job.GetExecutedResult()
 }
 
 // Queue a job into the Pool
@@ -72,7 +84,7 @@ func (p *Pool) Close() {
 	close(p.jobChan)
 	p.wg.Wait()
 
-	if p.ResChan != nil {
-		close(p.ResChan)
-	}
+	// if p.ResChan != nil {
+	// 	close(p.ResChan)
+	// }
 }

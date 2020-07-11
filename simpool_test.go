@@ -1,113 +1,119 @@
 package simpool_test
 
 import (
-	"fmt"
-	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/wonksing/simpool"
 )
 
+var Validate chan string
+
 type MyJob struct {
 	name string
-	res  chan string
+	res  chan *simpool.JobResult
 }
 
 func NewMyJob(name string) *MyJob {
 	return &MyJob{
 		name: name,
-		res:  make(chan string),
+		res:  make(chan *simpool.JobResult),
 	}
 }
-func (s *MyJob) Execute() interface{} {
-	// fmt.Println(s.name)
-	rn := rand.Intn(100)
-	time.Sleep(time.Millisecond * time.Duration(rn))
-	s.res <- s.name
-	return s.name
+func (s *MyJob) Execute() {
+	defer close(s.res)
+
+	// rn := rand.Intn(100)
+	// time.Sleep(time.Millisecond * time.Duration(rn))
+
+	s.res <- &simpool.JobResult{s.name, nil}
+
+	Validate <- s.name
 }
 
-func (s *MyJob) GetResult() interface{} {
+func (s *MyJob) GetExecutedResult() *simpool.JobResult {
 	return <-s.res
 }
 
-func TestGoPool2(t *testing.T) {
-	noOfWorkers := 4
+func TestPoolWithWait(t *testing.T) {
+	numTests := 10000
+	Validate = make(chan string, numTests)
+	noOfWorkers := 8
 	maxQueueSize := 100
 
 	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
-	gp.Init()
+
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := 0; i < numTests; i++ {
 		wg.Add(1)
 		go func(n int) {
+			defer wg.Done()
 			job := NewMyJob(strconv.Itoa(n))
 
-			gp.Queue(job)
-			r := job.GetResult().(string)
-			fmt.Println(r)
-			wg.Done()
+			r := gp.QueueAndWait(job)
+			if r.Err != nil {
+				// error handling
+				return
+			}
+			// fmt.Printf("MyJob Executed: %v\n", r.Res.(string))
 		}(i)
 	}
 	wg.Wait()
 	gp.Close()
+
+	close(Validate)
+	cnt := 0
+	for _ = range Validate {
+		// fmt.Printf("MySimpleJob Executed: %v\n", v)
+		cnt += 1
+	}
+
+	if cnt != numTests {
+		t.FailNow()
+	}
 }
 
-type MyJobWithResult struct {
+type MySimpleJob struct {
 	name string
 }
 
-func NewMyJobWithResult(name string) simpool.Job {
-	return &MyJobWithResult{
+func NewMySimpleJob(name string) *MySimpleJob {
+	return &MySimpleJob{
 		name: name,
 	}
 }
-func (s *MyJobWithResult) Execute() interface{} {
-	return s.name
+func (s *MySimpleJob) Execute() {
+	// rn := rand.Intn(100)
+	// time.Sleep(time.Millisecond * time.Duration(rn))
+	Validate <- s.name
 }
-func (s *MyJobWithResult) SetResult(data interface{}) {
-}
-func (s *MyJobWithResult) GetResult() interface{} {
+
+func (s *MySimpleJob) GetExecutedResult() *simpool.JobResult {
 	return nil
 }
-func TestGoPool2WithResult(t *testing.T) {
-	noOfWorkers := 4
+
+func TestPoolSimple(t *testing.T) {
+	numTests := 100000
+	Validate = make(chan string, numTests)
+	noOfWorkers := 8
 	maxQueueSize := 100
 
-	gp := simpool.NewPoolWithResult(noOfWorkers, maxQueueSize)
-	gp.Init()
-	for i := 0; i < 100; i++ {
-		job := NewMyJobWithResult(strconv.Itoa(i))
-
+	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
+	for i := 0; i < numTests; i++ {
+		job := NewMySimpleJob(strconv.Itoa(i))
 		gp.Queue(job)
 	}
-	time.Sleep(time.Second * 1)
 	gp.Close()
 
-	done := make(chan bool)
-	go func() {
-		for r := range gp.ResChan {
-			fmt.Println(r.(string))
-		}
-		close(done)
-	}()
-	<-done
+	close(Validate)
+	cnt := 0
+	for _ = range Validate {
+		// fmt.Printf("MySimpleJob Executed: %v\n", v)
+		cnt += 1
+	}
+
+	if cnt != numTests {
+		t.FailNow()
+	}
 }
-
-// func TestChannel(t *testing.T) {
-// 	c := make(chan string, 10)
-// 	go func() {
-// 		for i := 0; i < 20; i++ {
-// 			c <- strconv.Itoa(i)
-// 		}
-// 		close(c)
-// 	}()
-// 	time.Sleep(2000)
-
-// 	for val := range c {
-// 		fmt.Println(val)
-// 	}
-// }
