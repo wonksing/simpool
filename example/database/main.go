@@ -111,16 +111,22 @@ func selectFromSrc(db *sql.DB) (SomeModelList, error) {
 var (
 	numWorkers   int
 	maxQueueSize int
+	cleanup      bool
+	numTests     int
 )
 
 func init() {
-	flag.IntVar(&numWorkers, "w", 8, "number of workers")
-	flag.IntVar(&maxQueueSize, "q", 100, "max queue size")
-}
-func main() {
+	flag.IntVar(&numWorkers, "w", 16, "number of workers")
+	flag.IntVar(&maxQueueSize, "q", 320, "max queue size")
+	flag.BoolVar(&cleanup, "c", true, "cleanup test db?")
+	flag.IntVar(&numTests, "n", 10000, "number of tests")
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
+}
+func main() {
 	log.Printf("numWorkers: %v, maxQueueSize: %v, numCPU: %v", numWorkers, maxQueueSize, runtime.NumCPU())
+
+	// connect to source database
 	connStrSrc := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		HostSrc, PortSrc, UserSrc, PwSrc, DBNamSrc)
 
@@ -134,6 +140,7 @@ func main() {
 	DBSrc.SetMaxOpenConns(1)
 	DBSrc.SetConnMaxLifetime(time.Minute * 5)
 
+	// connect to destination database
 	connStrDst := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		HostDst, PortDst, UserDst, PwDst, DBNamDst)
 
@@ -147,27 +154,32 @@ func main() {
 	DBDst.SetMaxOpenConns(numWorkers)
 	DBDst.SetConnMaxLifetime(time.Minute * 5)
 
-	// cleanupSrc(DBSrc)
-	// cleanupDst(DBDst)
-	// start := time.Now()
-	// numData := 40000
-	// createTestData(DBSrc, numData)
-	// elapsed := time.Since(start)
-	// log.Printf("Finished creating %v test data(%v)", numData, elapsed)
+	// create and create test data
+	if cleanup {
+		cleanupSrc(DBSrc)
+		cleanupDst(DBDst)
+		start := time.Now()
+		createTestData(DBSrc, numTests)
+		elapsed := time.Since(start)
+		log.Printf("Finished creating %v test data(%v)", numTests, elapsed)
+	}
 
+	// get data from source
 	list, err := selectFromSrc(DBSrc)
 	if err != nil {
 		log.Printf("Error Selecting from source: %v\n", err)
 		return
 	}
 
+	// insert into destination using simpool
 	gp := simpool.NewPool(numWorkers, maxQueueSize)
 	start := time.Now()
 	for _, v := range list {
 		job := NewInsertJob(DBDst, v.Col1, v.Col2)
 		gp.Queue(job)
 	}
-	gp.Close()
+	gp.Close() // wait for all jobs to finish and return
+
 	elapsed := time.Since(start)
 	en := int(elapsed / time.Second)
 	log.Printf("Finished %v jobs(%v). %v tps\n", len(list), elapsed, len(list)/en)
