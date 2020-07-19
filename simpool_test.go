@@ -1,46 +1,43 @@
 package simpool_test
 
 import (
+	"fmt"
+	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/wonksing/simpool"
 )
 
 var Validate chan string
 
-type MyJobWithResult struct {
+type MyJob struct {
 	name string
-	res  chan *simpool.JobResult
 }
 
-func NewMyJobWithResult(name string) *MyJobWithResult {
-	return &MyJobWithResult{
+func NewMyJob(name string) *MyJob {
+	return &MyJob{
 		name: name,
-		res:  make(chan *simpool.JobResult),
 	}
 }
-func (s *MyJobWithResult) Execute() {
-	defer close(s.res)
-
-	// rn := rand.Intn(100)
-	// time.Sleep(time.Millisecond * time.Duration(rn))
-
-	s.res <- &simpool.JobResult{s.name, nil}
-
+func (s *MyJob) Execute() *simpool.JobResult {
+	rn := rand.Intn(100)
+	time.Sleep(time.Millisecond * time.Duration(rn))
 	Validate <- s.name
-}
-
-func (s *MyJobWithResult) GetExecutedResult() *simpool.JobResult {
-	return <-s.res
+	// fmt.Printf("returning %v\n", s.name)
+	return &simpool.JobResult{
+		Res: s.name,
+		Err: nil,
+	}
 }
 
 func TestPoolWithWait(t *testing.T) {
-	numTests := 10000
+	numTests := 1000
 	Validate = make(chan string, numTests)
-	noOfWorkers := 8
-	maxQueueSize := 100
+	noOfWorkers := 32
+	maxQueueSize := 320
 
 	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
 
@@ -49,14 +46,14 @@ func TestPoolWithWait(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			job := NewMyJobWithResult(strconv.Itoa(n))
+			job := NewMyJob(strconv.Itoa(n))
 
 			r := gp.QueueAndWait(job)
 			if r.Err != nil {
 				// error handling
 				return
 			}
-			// fmt.Printf("MyJob Executed: %v\n", r.Res.(string))
+			fmt.Printf("MyJob Executed: %v %v\n", strconv.Itoa(n), r.Res.(string))
 		}(i)
 	}
 	wg.Wait()
@@ -74,38 +71,25 @@ func TestPoolWithWait(t *testing.T) {
 	}
 }
 
-type MyJob struct {
-	name string
-}
-
-func NewMyJob(name string) *MyJob {
-	return &MyJob{
-		name: name,
-	}
-}
-func (s *MyJob) Execute() {
-	// rn := rand.Intn(100)
-	// time.Sleep(time.Millisecond * time.Duration(rn))
-	Validate <- s.name
-}
-
 func TestPoolSimple(t *testing.T) {
-	numTests := 100000
+	numTests := 1000
 	Validate = make(chan string, numTests)
-	noOfWorkers := 8
-	maxQueueSize := 100
+	noOfWorkers := 32
+	maxQueueSize := 320
 
 	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
 	for i := 0; i < numTests; i++ {
 		job := NewMyJob(strconv.Itoa(i))
 		gp.Queue(job)
+		fmt.Printf("queued %v\n", strconv.Itoa(i))
 	}
 	gp.Close()
+	fmt.Println("channel closed")
 
 	close(Validate)
 	cnt := 0
-	for _ = range Validate {
-		// fmt.Printf("MySimpleJob Executed: %v\n", v)
+	for v := range Validate {
+		fmt.Printf("MySimpleJob Executed: %v\n", v)
 		cnt += 1
 	}
 

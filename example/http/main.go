@@ -60,30 +60,25 @@ func main() {
 
 type LongJob struct {
 	body []byte
-	res  chan *simpool.JobResult
 }
 
 func NewLongJob(body []byte) *LongJob {
 	return &LongJob{
 		body: body,
-		res:  make(chan *simpool.JobResult),
 	}
 }
-func (s *LongJob) Execute() {
-	defer close(s.res)
-
+func (s *LongJob) Execute() *simpool.JobResult {
 	log.Println("Executing Long Job")
 
 	bodyStr := string(s.body)
 	// rn := rand.Intn(100)
 	time.Sleep(time.Second * time.Duration(6))
+
+	log.Println("Finished Long Job")
+
 	jr := &simpool.JobResult{
 		Res: bodyStr,
 		Err: nil,
 	}
-	log.Println("Finished Long Job")
-	s.res <- jr
-}
-func (s *LongJob) GetExecutedResult() *simpool.JobResult {
-	return <-s.res
+	return jr
 }

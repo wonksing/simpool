@@ -8,11 +8,5 @@ type JobResult struct {
 
 // Job interface
 type Job interface {
-	Execute()
-}
-
-// JobSimple interface
-type JobWithResult interface {
-	Job
-	GetExecutedResult() *JobResult
+	Execute() *JobResult
 }

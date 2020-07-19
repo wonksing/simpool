@@ -2,18 +2,23 @@ package simpool
 
 import "sync"
 
+type internalJob struct {
+	resChan chan *JobResult
+	job     Job
+}
+
 // Pool struct
 type Pool struct {
 	noOfWorkers  int
 	maxQueueSize int
 	wg           *sync.WaitGroup
-	jobChan      chan Job
+	jobChan      chan *internalJob
 }
 
 // NewPool create pool object
 func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 	var wg sync.WaitGroup
-	jobChan := make(chan Job, maxQueueSize)
+	jobChan := make(chan *internalJob, maxQueueSize)
 	p := &Pool{
 		noOfWorkers:  noOfWorkers,
 		maxQueueSize: maxQueueSize,
@@ -37,23 +42,35 @@ func (p *Pool) startWorkers() {
 
 	// it is a blocking operation.
 	// wait until a job is received.
-	// break when the channel is closed and empty.
-	for job := range p.jobChan {
-		if job != nil {
-			job.Execute()
+	// break when the 'jobChan' is closed and empty.
+	for e := range p.jobChan {
+		if e != nil {
+			res := e.job.Execute()
+			if e.resChan != nil {
+				// send JobResult to 'resChan'
+				e.resChan <- res
+				close(e.resChan)
+			}
 		}
 	}
 }
 
-// QueueAndWait pushes a job into the Pool and wait for it to finish
-func (p *Pool) QueueAndWait(job JobWithResult) *JobResult {
-	p.jobChan <- job
-	return job.GetExecutedResult()
-}
-
 // Queue a job into the Pool
 func (p *Pool) Queue(job Job) {
-	p.jobChan <- job
+	j := &internalJob{
+		job: job,
+	}
+	p.jobChan <- j
+}
+
+// QueueAndWait a job into the Pool
+func (p *Pool) QueueAndWait(job Job) *JobResult {
+	j := &internalJob{
+		resChan: make(chan *JobResult, 1),
+		job:     job,
+	}
+	p.jobChan <- j
+	return <-j.resChan
 }
 
 // Close workers
