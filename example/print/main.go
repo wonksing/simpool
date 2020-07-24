@@ -1,17 +1,19 @@
-# simpool...
-goroutine pool with channel
+package main
 
-# Installation
-```
-go get github.com/wonksing/simpool
-```
+import (
+	"flag"
+	"fmt"
+	"log"
+	"runtime"
+	"strconv"
+	"time"
 
-# Example
-## Basic Usage: Simple print
-``` go
+	_ "github.com/lib/pq"
+	"github.com/wonksing/simpool"
+)
 
 // PrintJob to push into the pool
-// A job which interfaces simpool.Job
+// Your job should interfaces simpool.Job
 type PrintJob struct {
 	word string
 }
@@ -28,6 +30,7 @@ func (s *PrintJob) Execute() *simpool.JobResult {
 var (
 	numWorkers   int
 	maxQueueSize int
+	cleanup      bool
 	numTests     int
 )
 
@@ -56,12 +59,3 @@ func main() {
 	elapsed := time.Since(start)
 	log.Printf("Finished %v jobs(%v)\n", numTests, elapsed)
 }
-```
-
-## Usage in DB to DB
-```
-```
-
-## Usage in Http Server
-```
-```
