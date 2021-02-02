@@ -31,6 +31,10 @@ func NewPool(noOfWorkers int, maxQueueSize int) *Pool {
 
 // Init initializes the pool
 func (p *Pool) init() {
+	if p.jobChan == nil {
+		p.jobChan = make(chan *internalJob, p.maxQueueSize)
+	}
+
 	p.wg.Add(p.noOfWorkers)
 	for i := 0; i < p.noOfWorkers; i++ {
 		go p.startWorkers()
@@ -77,4 +81,11 @@ func (p *Pool) QueueAndWait(job Job) *JobResult {
 func (p *Pool) Close() {
 	close(p.jobChan)
 	p.wg.Wait()
+}
+
+// Wait for jobs to finish and get ready to receive jobs again
+func (p *Pool) Wait() {
+	p.Close()
+	p.jobChan = nil
+	p.init()
 }
