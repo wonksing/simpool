@@ -1,4 +1,4 @@
-package simpool_test
+package simpool
 
 import (
 	"fmt"
@@ -7,8 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/wonksing/simpool"
 )
 
 var Validate chan string
@@ -22,12 +20,12 @@ func NewMyJob(name string) *MyJob {
 		name: name,
 	}
 }
-func (s *MyJob) Execute() *simpool.JobResult {
+func (s *MyJob) Execute() *JobResult {
 	rn := rand.Intn(100)
 	time.Sleep(time.Millisecond * time.Duration(rn))
 	Validate <- s.name
 	// fmt.Printf("returning %v\n", s.name)
-	return &simpool.JobResult{
+	return &JobResult{
 		Res: s.name,
 		Err: nil,
 	}
@@ -39,7 +37,7 @@ func TestPoolWithWait(t *testing.T) {
 	noOfWorkers := 32
 	maxQueueSize := 320
 
-	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
+	gp := NewPool(noOfWorkers, maxQueueSize)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numTests; i++ {
@@ -77,7 +75,7 @@ func TestPoolSimple(t *testing.T) {
 	noOfWorkers := 32
 	maxQueueSize := 320
 
-	gp := simpool.NewPool(noOfWorkers, maxQueueSize)
+	gp := NewPool(noOfWorkers, maxQueueSize)
 	for i := 0; i < numTests; i++ {
 		job := NewMyJob(strconv.Itoa(i))
 		gp.Queue(job)
