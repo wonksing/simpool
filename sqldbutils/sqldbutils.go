@@ -15,8 +15,10 @@ var (
 		"CHAR",
 		"VARCHAR", "NVARCHAR",
 		"TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT",
-
 		"VARCHAR2", "NCHAR",
+	}
+	NumericDatabaseTypeNames = [...]string{
+		"NUMERIC", "NUMBER", "DECIMAL", "INT", "BIGINT",
 	}
 )
 
@@ -25,13 +27,26 @@ func isTextDatabaseType(typ string) bool {
 	if typ == "" {
 		return false
 	}
-	upperTyp := strings.ToUpper(typ)
+	upperTyp := strings.TrimSpace(strings.ToUpper(typ))
 	for _, str := range TextDatabaseTypeNames {
 		if str == upperTyp {
 			return true
 		}
 	}
 	return false
+}
+func isNumericDatabaseType(typ string) bool {
+	if typ == "" {
+		return false
+	}
+	upperTyp := strings.TrimSpace(strings.ToUpper(typ))
+	for _, str := range NumericDatabaseTypeNames {
+		if str == upperTyp {
+			return true
+		}
+	}
+	return false
+
 }
 
 func InitDB(dbConnStr string, dbDriver string, maxIdleConns int, maxOpenConns int, connMaxLifeTime int) (*sql.DB, error) {
@@ -46,8 +61,19 @@ func InitDB(dbConnStr string, dbDriver string, maxIdleConns int, maxOpenConns in
 	return pdb, nil
 }
 
-// ScanUnknownColumns rowst의 컬럼 유형이나 수를 모르는 경우 사용한다.
-func ScanUnknownColumns(rows *sql.Rows) ([][]interface{}, error) {
+var (
+	typeTime        time.Time
+	typeRawBytes    sql.RawBytes
+	typeNullString  sql.NullString
+	typeNullFloat64 sql.NullFloat64
+	typeNullInt32   sql.NullInt32
+	typeNullInt64   sql.NullInt64
+	typeNullTime    sql.NullTime
+	typeNullBool    sql.NullBool
+)
+
+// scanUnknownColumns rowst의 컬럼 유형이나 수를 모르는 경우 사용한다.
+func scanUnknownColumns(rows *sql.Rows) ([][]interface{}, error) {
 	if rows == nil {
 		return nil, errors.New("nil rows are not allowed")
 	}
@@ -57,8 +83,6 @@ func ScanUnknownColumns(rows *sql.Rows) ([][]interface{}, error) {
 		return nil, err
 	}
 
-	var typeRawBytes sql.RawBytes
-	var typeString sql.NullString
 	result := make([][]interface{}, 0)
 	for rows.Next() {
 		columnPointers := make([]interface{}, len(colTypes))
@@ -73,11 +97,59 @@ func ScanUnknownColumns(rows *sql.Rows) ([][]interface{}, error) {
 			// 	o = reflect.New(ct.ScanType()).Interface()
 			// }
 
-			if ct.ScanType() == reflect.TypeOf(typeRawBytes) && isTextDatabaseType(ct.DatabaseTypeName()) {
-				o = reflect.New(reflect.TypeOf(typeString)).Interface()
-			} else {
-				o = reflect.New(ct.ScanType()).Interface()
+			// if ct.ScanType() == reflect.TypeOf(typeRawBytes) && isTextDatabaseType(ct.DatabaseTypeName()) {
+			// 	o = reflect.New(reflect.TypeOf(typeString)).Interface()
+			// } else {
+			// 	o = reflect.New(ct.ScanType()).Interface()
+			// }
+
+			switch ct.ScanType() {
+			case reflect.TypeOf(typeRawBytes):
+				if isTextDatabaseType(ct.DatabaseTypeName()) {
+					o = reflect.New(reflect.TypeOf(typeNullString)).Interface()
+				} else {
+					o = reflect.New(ct.ScanType()).Interface()
+				}
+			case reflect.TypeOf((string)("")):
+				o = reflect.New(reflect.TypeOf(typeNullString)).Interface()
+			case reflect.TypeOf((float32)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullFloat64)).Interface()
+			case reflect.TypeOf((float64)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullFloat64)).Interface()
+			case reflect.TypeOf((bool)(true)):
+				o = reflect.New(reflect.TypeOf(typeNullBool)).Interface()
+			case reflect.TypeOf(typeTime):
+				o = reflect.New(reflect.TypeOf(typeNullTime)).Interface()
+			case reflect.TypeOf((int)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt64)).Interface()
+			case reflect.TypeOf((int8)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt32)).Interface()
+			case reflect.TypeOf((int16)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt32)).Interface()
+			case reflect.TypeOf((int32)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt32)).Interface()
+			case reflect.TypeOf((int64)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt64)).Interface()
+			case reflect.TypeOf((uint)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt64)).Interface()
+			case reflect.TypeOf((uint8)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt32)).Interface()
+			case reflect.TypeOf((uint16)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt32)).Interface()
+			case reflect.TypeOf((uint32)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt32)).Interface()
+			case reflect.TypeOf((uint64)(0)):
+				o = reflect.New(reflect.TypeOf(typeNullInt64)).Interface()
+			default:
+				if isNumericDatabaseType(ct.DatabaseTypeName()) {
+					o = reflect.New(reflect.TypeOf(typeNullFloat64)).Interface()
+				} else if isTextDatabaseType(ct.DatabaseTypeName()) {
+					o = reflect.New(reflect.TypeOf(typeNullString)).Interface()
+				} else {
+					o = reflect.New(ct.ScanType()).Interface()
+				}
 			}
+
 			columnPointers[i] = o
 		}
 		err = rows.Scan(columnPointers...)
@@ -107,7 +179,7 @@ func QueryUnknownColumns(db *sql.DB, sqlQry string) ([][]interface{}, []string, 
 		return nil, nil, err
 	}
 
-	scanned, err := ScanUnknownColumns(rows)
+	scanned, err := scanUnknownColumns(rows)
 	if err != nil {
 		return nil, nil, err
 	}
